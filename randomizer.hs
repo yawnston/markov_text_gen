@@ -2,6 +2,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import System.Random
 import Debug.Trace
+import System.Environment
 
 
 makePairs :: [a] -> [(a, a)]
@@ -30,3 +31,9 @@ putWord freqMap (w, next)
 getFrequencies :: [String] -> Map String [(String, Integer)]
 getFrequencies words = foldl (putWord) (Map.fromList []) pairs
     where pairs = [(x, y)| (x, y) <- makePairs words]
+
+main = do
+    (fileName : outLength : restArgs) <- getArgs
+    fileContents <- readFile fileName
+    let freqData = getFrequencies $ words [x | x <- fileContents]
+    putStr $ show freqData
