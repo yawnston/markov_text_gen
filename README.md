@@ -1,1 +1,1 @@
-# text_randomizer
+# Markov text generator
