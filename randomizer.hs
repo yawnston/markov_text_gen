@@ -35,6 +35,7 @@ getFrequencies :: [String] -> FrequencyMap
 getFrequencies words = foldl (putWord) (Map.fromList []) pairs
     where pairs = [(x, y)| (x, y) <- makePairs words]
 
+-- picks a random element from a list (unweighted)
 pick :: [a] -> IO a
 pick xs = fmap (xs !!) $ randomRIO (0, length xs - 1)
 
@@ -45,24 +46,26 @@ getFirstWord freqData = do
     (w, record) <- pick candidates
     return w
 
+-- predicate defining characters that are considered to end a sentence
 isSentenceEnder :: Char -> Bool
 isSentenceEnder c
     | c == '.' || c == '!' || c == '?' = True
-    | otherwise = False 
+    | otherwise = False
 
 chooseNextWord :: FrequencyMap -> String -> IO String
 chooseNextWord freqData prevWord = do
-    let candidates = (trace (show prevWord)freqData Map.! prevWord)
+    let candidates = freqData Map.! prevWord
     -- HACK: does not choose weighted (chooses unweighted)
     (w, count) <- pick candidates
     return w
 
 makeSentenceBody :: FrequencyMap -> String -> IO String
 makeSentenceBody freqData prevWord = do
-    nextWord <- chooseNextWord freqData prevWord
-    body <- makeSentenceBody freqData nextWord
     if isSentenceEnder (last prevWord) then return "" -- end of sentence -> don't add anything else
-    else return (nextWord ++ " " ++ body)
+    else do
+        nextWord <- chooseNextWord freqData prevWord
+        body <- makeSentenceBody freqData nextWord
+        return (nextWord ++ " " ++ body)
 
 makeSentence :: FrequencyMap -> IO String -- FIXME: empty input?
 makeSentence freqData = do
@@ -72,10 +75,11 @@ makeSentence freqData = do
 
 makeText :: FrequencyMap -> Int -> String -> IO String
 makeText freqData count text = do
-    sentence <- makeSentence freqData
-    rest <- makeText freqData (count - 1) (text ++ " " ++ sentence)
     if count <= 0 then return text
-    else return rest
+    else do
+        sentence <- makeSentence freqData
+        rest <- makeText freqData (count - 1) (text ++ " " ++ sentence)
+        return rest
 
 main = do
     -- outLength is the number of sentences to be printed
