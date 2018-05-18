@@ -8,9 +8,11 @@ import System.Environment
 
 type FrequencyMap = Map String [(String, Int)]
 
+-- make a list of pairs from a list, e.g. [1..4] -> [(1,2), (2,3), (3,4)]
 makePairs :: [a] -> [(a, a)]
 makePairs l = zip l (tail l)
 
+-- predicate for checking whether a given word is already present as a next word in another word's record
 checkRecordPresence :: String -> Bool -> (String, Int) -> Bool
 checkRecordPresence _ True _ = True
 checkRecordPresence w False (word, _) = word == w
@@ -31,6 +33,7 @@ putWord freqMap (w, next)
     where record = Map.lookup w freqMap
           (Just recordVal) = record
 
+-- create a FrequencyMap from a list of strings
 getFrequencies :: [String] -> FrequencyMap
 getFrequencies words = foldl (putWord) (Map.fromList []) pairs
     where pairs = [(x, y)| (x, y) <- makePairs words]
@@ -38,6 +41,18 @@ getFrequencies words = foldl (putWord) (Map.fromList []) pairs
 -- picks a random element from a list (unweighted)
 pick :: [a] -> IO a
 pick xs = fmap (xs !!) $ randomRIO (0, length xs - 1)
+
+-- picks a random string from a list of weighted strings (taking the weights into account)
+pickWeighted :: [(String,Int)] -> IO String
+pickWeighted xs = pickWeightedImpl xs 0 ""
+
+-- single iteration weighted pick algorithm (very handy when our FrequencyMap can contain hundreds/thousands of records)
+pickWeightedImpl :: [(String,Int)] -> Int -> String -> IO String
+pickWeightedImpl [] _ selected = do return selected
+pickWeightedImpl ((item, weight):xs) totalWeight selected = do
+    rand <- randomRIO (0, totalWeight + weight)
+    if rand >= totalWeight then pickWeightedImpl xs (totalWeight + weight) item
+    else pickWeightedImpl xs (totalWeight + weight) selected
 
 -- gets a random word that starts with an uppercase letter (unweighted)
 getFirstWord :: FrequencyMap -> IO String
@@ -52,11 +67,18 @@ isSentenceEnder c
     | c == '.' || c == '!' || c == '?' = True
     | otherwise = False
 
+-- given a word, chooses a random one that can follow it
 chooseNextWord :: FrequencyMap -> String -> IO String
 chooseNextWord freqData prevWord = do
     let candidates = freqData Map.! prevWord
-    -- HACK: does not choose weighted (chooses unweighted)
+
+    {-
+    -- this choice is not weighted, a weighted choice algorithm is used instead
     (w, count) <- pick candidates
+    return w
+    -}
+
+    w <- pickWeighted candidates
     return w
 
 makeSentenceBody :: FrequencyMap -> String -> IO String
@@ -67,12 +89,14 @@ makeSentenceBody freqData prevWord = do
         body <- makeSentenceBody freqData nextWord
         return (nextWord ++ " " ++ body)
 
-makeSentence :: FrequencyMap -> IO String -- FIXME: empty input?
+-- generate a full sentence, from start to finish
+makeSentence :: FrequencyMap -> IO String
 makeSentence freqData = do
     firstWord <- getFirstWord freqData
     body <- makeSentenceBody freqData firstWord
     return $ firstWord ++ " " ++ body
 
+-- simulates a for loop, calling itself recursively to generate a new sentence (I had issues with using iterate inside a do block)
 makeText :: FrequencyMap -> Int -> String -> IO String
 makeText freqData count text = do
     if count <= 0 then return text
@@ -81,10 +105,14 @@ makeText freqData count text = do
         rest <- makeText freqData (count - 1) (text ++ " " ++ sentence)
         return rest
 
+-- calling syntax: <programName> <fileName> <sentenceCount>
 main = do
     -- outLength is the number of sentences to be printed
     (fileName : outLength : restArgs) <- getArgs
     fileContents <- readFile fileName
     let freqData = getFrequencies $ words [x | x <- fileContents]
-    text <- makeText freqData (read outLength :: Int) ""
-    putStr text
+    -- if we don't have any data to generate from, do nothing
+    if freqData == (Map.fromList []) then putStr ""
+    else do
+        text <- makeText freqData (read outLength :: Int) ""
+        putStr text
